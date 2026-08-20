@@ -1,0 +1,10 @@
+flowchart LR
+    A["Source PDFs\n(sample_docs/ or mounted dir)"] --> B["Docling\nDocumentConverter"]
+    B -->|"layout analysis,\ntable structure,\noptional OCR"| C["Markdown export\n(per document)"]
+    C --> D["MarkdownNodeParser\n(split on heading structure)"]
+    D --> E["SentenceSplitter\n(enforce chunk_size /\nchunk_overlap ceiling)"]
+    E --> F["Nodes with metadata\n(source_file, section_path)"]
+    F --> G["OllamaEmbedding\n(nomic-embed-text)"]
+    G --> H[("PGVectorStore\ndocument_chunks table\nHNSW index, cosine distance")]
+
+    style H fill:#eef2ff,stroke:#4338ca,color:#1e1b4b

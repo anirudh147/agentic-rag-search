@@ -1,0 +1,710 @@
+openapi: 3.1.0
+info:
+  title: Document Search Platform -- Agentic RAG API
+  description: 'REST API for an agentic Retrieval-Augmented Generation backend: Docling
+    document preprocessing, LlamaIndex + PGVector indexing and retrieval, a CrewAI
+    multi-agent contextual RAG pipeline (query analysis -> retrieval -> synthesis
+    -> verification), Arize Phoenix tracing, and RAGAs-based evaluation. Also exposes
+    an OpenAI-compatible `/v1/chat/completions` surface so OpenWebUI (or any OpenAI
+    SDK client) can use this backend directly.'
+  version: 0.1.0
+  contact:
+    name: Document Search Platform
+  license:
+    name: MIT
+servers:
+- url: http://localhost:8000
+  description: Local docker-compose deployment
+paths:
+  /api/v1/health:
+    get:
+      tags:
+      - health
+      summary: Health
+      description: Liveness + dependency checks (Postgres, Ollama, Phoenix).
+      operationId: get_api_v1_health
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /api/v1/ingest:
+    post:
+      tags:
+      - ingestion
+      summary: Ingest
+      description: Runs the full Docling -> split -> embed -> PGVector-index pipeline
+        over `source_dir` (defaults to SOURCE_DOCUMENTS_DIR, e.g. the mounted `sample_docs/`
+        directory).
+      operationId: post_api_v1_ingest
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestResponse'
+        '422': &id001
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestRequest'
+  /api/v1/ingest/status:
+    get:
+      tags:
+      - ingestion
+      summary: Ingest Status
+      description: Polls the result of the most recent background ingestion run.
+      operationId: get_api_v1_ingest_status
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestResponse'
+  /api/v1/query:
+    post:
+      tags:
+      - rag
+      summary: Query
+      description: 'Native rich RAG query: runs the CrewAI agentic crew and returns
+        the answer, citations, verifier approval status, and (optionally) the full
+        execution trace.'
+      operationId: post_api_v1_query
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RagQueryResponse'
+        '422': *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RagQueryRequest'
+  /api/v1/search:
+    post:
+      tags:
+      - rag
+      summary: Search
+      description: Raw retrieval only (no generation) -- useful for debugging what
+        the index contains.
+      operationId: post_api_v1_search
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '422': *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+  /api/v1/prompts:
+    get:
+      tags:
+      - prompts
+      summary: List Prompts
+      description: Introspection endpoint over the externalized prompt library (app/prompts/library/*.yaml)
+        -- lets an operator confirm which prompt versions are live.
+      operationId: get_api_v1_prompts
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptListResponse'
+  /api/v1/prompts/reload:
+    post:
+      tags:
+      - prompts
+      summary: Reload Prompts
+      description: Hot-reloads prompt YAML files from disk without restarting the
+        service.
+      operationId: post_api_v1_prompts_reload
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptListResponse'
+  /api/v1/eval/run:
+    post:
+      tags:
+      - evaluation
+      summary: Run Eval
+      description: Runs the RAGAs evaluation harness over the curated Q&A dataset
+        and returns aggregate faithfulness / answer relevancy / context precision
+        / context recall scores.
+      operationId: post_api_v1_eval_run
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvalRunResponse'
+        '422': *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvalRunRequest'
+  /api/v1/eval/status:
+    get:
+      tags:
+      - evaluation
+      summary: Eval Status
+      description: Polls the result of the most recent background evaluation run.
+      operationId: get_api_v1_eval_status
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvalRunResponse'
+  /v1/chat/completions:
+    post:
+      tags:
+      - openwebui-compat
+      summary: Chat Completions
+      description: OpenAI-compatible surface consumed by OpenWebUI (or any OpenAI
+        SDK client). `stream=true` is rejected with a 400 -- this endpoint returns
+        one final, verified answer per turn.
+      operationId: post_v1_chat_completions
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatCompletionResponse'
+        '422': *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatCompletionRequest'
+  /v1/models:
+    get:
+      tags:
+      - openwebui-compat
+      summary: List Models
+      description: OpenAI-compatible model list -- advertises the single `agentic-rag`
+        model.
+      operationId: get_v1_models
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelListResponse'
+components:
+  schemas:
+    ChatCompletionChoice:
+      properties:
+        index:
+          title: Index
+          type: integer
+        message:
+          $ref: '#/components/schemas/ChatMessage'
+        finish_reason:
+          default: stop
+          title: Finish Reason
+          type: string
+      required:
+      - index
+      - message
+      title: ChatCompletionChoice
+      type: object
+    ChatCompletionRequest:
+      properties:
+        model:
+          default: agentic-rag
+          title: Model
+          type: string
+        messages:
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+          title: Messages
+          type: array
+        temperature:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: 0.1
+          title: Temperature
+        stream:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          default: false
+          title: Stream
+      required:
+      - messages
+      title: ChatCompletionRequest
+      type: object
+    ChatCompletionResponse:
+      properties:
+        id:
+          title: Id
+          type: string
+        object:
+          default: chat.completion
+          title: Object
+          type: string
+        created:
+          title: Created
+          type: integer
+        model:
+          title: Model
+          type: string
+        choices:
+          items:
+            $ref: '#/components/schemas/ChatCompletionChoice'
+          title: Choices
+          type: array
+        usage:
+          $ref: '#/components/schemas/ChatCompletionUsage'
+      required:
+      - model
+      - choices
+      title: ChatCompletionResponse
+      type: object
+    ChatCompletionUsage:
+      properties:
+        prompt_tokens:
+          default: 0
+          title: Prompt Tokens
+          type: integer
+        completion_tokens:
+          default: 0
+          title: Completion Tokens
+          type: integer
+        total_tokens:
+          default: 0
+          title: Total Tokens
+          type: integer
+      title: ChatCompletionUsage
+      type: object
+    ChatMessage:
+      properties:
+        role:
+          enum:
+          - system
+          - user
+          - assistant
+          title: Role
+          type: string
+        content:
+          title: Content
+          type: string
+      required:
+      - role
+      - content
+      title: ChatMessage
+      type: object
+    EvalMetricScores:
+      properties:
+        faithfulness:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          title: Faithfulness
+        answer_relevancy:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          title: Answer Relevancy
+        context_precision:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          title: Context Precision
+        context_recall:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          title: Context Recall
+      title: EvalMetricScores
+      type: object
+    EvalRunRequest:
+      properties:
+        dataset_path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Dataset Path
+        run_async:
+          default: true
+          title: Run Async
+          type: boolean
+      title: EvalRunRequest
+      type: object
+    EvalRunResponse:
+      properties:
+        status:
+          enum:
+          - started
+          - completed
+          title: Status
+          type: string
+        num_questions:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          default: null
+          title: Num Questions
+        scores:
+          anyOf:
+          - $ref: '#/components/schemas/EvalMetricScores'
+          - type: 'null'
+          default: null
+        report_path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Report Path
+      required:
+      - status
+      title: EvalRunResponse
+      type: object
+    HTTPValidationError:
+      title: HTTPValidationError
+      type: object
+      properties:
+        detail:
+          title: Detail
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationError'
+    HealthResponse:
+      properties:
+        status:
+          enum:
+          - ok
+          - degraded
+          title: Status
+          type: string
+        version:
+          title: Version
+          type: string
+        postgres:
+          title: Postgres
+          type: boolean
+        ollama:
+          title: Ollama
+          type: boolean
+        phoenix:
+          title: Phoenix
+          type: boolean
+      required:
+      - status
+      - version
+      - postgres
+      - ollama
+      - phoenix
+      title: HealthResponse
+      type: object
+    IngestRequest:
+      properties:
+        source_dir:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: Directory of documents to ingest. Defaults to SOURCE_DOCUMENTS_DIR.
+          title: Source Dir
+        run_async:
+          default: true
+          description: If true, run ingestion in the background and return immediately.
+          title: Run Async
+          type: boolean
+      title: IngestRequest
+      type: object
+    IngestResponse:
+      properties:
+        status:
+          enum:
+          - started
+          - completed
+          title: Status
+          type: string
+        documents_processed:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          default: null
+          title: Documents Processed
+        chunks_indexed:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          default: null
+          title: Chunks Indexed
+        duration_seconds:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          title: Duration Seconds
+        skipped_files:
+          items:
+            type: string
+          title: Skipped Files
+          type: array
+      required:
+      - status
+      title: IngestResponse
+      type: object
+    ModelInfo:
+      properties:
+        id:
+          title: Id
+          type: string
+        object:
+          default: model
+          title: Object
+          type: string
+        created:
+          title: Created
+          type: integer
+        owned_by:
+          default: doc-search-agentic-rag
+          title: Owned By
+          type: string
+      required:
+      - id
+      title: ModelInfo
+      type: object
+    ModelListResponse:
+      properties:
+        object:
+          default: list
+          title: Object
+          type: string
+        data:
+          items:
+            $ref: '#/components/schemas/ModelInfo'
+          title: Data
+          type: array
+      required:
+      - data
+      title: ModelListResponse
+      type: object
+    PromptInfo:
+      properties:
+        name:
+          title: Name
+          type: string
+        version:
+          title: Version
+          type: string
+        summary:
+          title: Summary
+          type: string
+        fields:
+          items:
+            type: string
+          title: Fields
+          type: array
+        input_variables:
+          items:
+            type: string
+          title: Input Variables
+          type: array
+      required:
+      - name
+      - version
+      - summary
+      - fields
+      - input_variables
+      title: PromptInfo
+      type: object
+    PromptListResponse:
+      properties:
+        prompts:
+          items:
+            $ref: '#/components/schemas/PromptInfo'
+          title: Prompts
+          type: array
+      required:
+      - prompts
+      title: PromptListResponse
+      type: object
+    RagQueryRequest:
+      properties:
+        question:
+          title: Question
+          type: string
+        chat_history:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: ''
+          description: Freeform prior-turn context, if any.
+          title: Chat History
+        include_trace:
+          default: false
+          description: Include the full multi-agent execution trace.
+          title: Include Trace
+          type: boolean
+      required:
+      - question
+      title: RagQueryRequest
+      type: object
+    RagQueryResponse:
+      properties:
+        question:
+          title: Question
+          type: string
+        answer:
+          title: Answer
+          type: string
+        approved:
+          description: Whether the Verifier agent approved the answer as grounded.
+          title: Approved
+          type: boolean
+        iterations:
+          title: Iterations
+          type: integer
+        sources:
+          items:
+            $ref: '#/components/schemas/SourceRef'
+          title: Sources
+          type: array
+        trace:
+          anyOf:
+          - items:
+              additionalProperties: true
+              type: object
+            type: array
+          - type: 'null'
+          default: null
+          title: Trace
+      required:
+      - question
+      - answer
+      - approved
+      - iterations
+      - sources
+      title: RagQueryResponse
+      type: object
+    SearchRequest:
+      properties:
+        query:
+          title: Query
+          type: string
+        top_k:
+          default: 6
+          maximum: 50
+          minimum: 1
+          title: Top K
+          type: integer
+      required:
+      - query
+      title: SearchRequest
+      type: object
+    SearchResponse:
+      properties:
+        query:
+          title: Query
+          type: string
+        results:
+          items:
+            $ref: '#/components/schemas/SearchResultItem'
+          title: Results
+          type: array
+      required:
+      - query
+      - results
+      title: SearchResponse
+      type: object
+    SearchResultItem:
+      properties:
+        text:
+          title: Text
+          type: string
+        score:
+          title: Score
+          type: number
+        source_file:
+          title: Source File
+          type: string
+        section_path:
+          title: Section Path
+          type: string
+        node_id:
+          title: Node Id
+          type: string
+      required:
+      - text
+      - score
+      - source_file
+      - section_path
+      - node_id
+      title: SearchResultItem
+      type: object
+    SourceRef:
+      properties:
+        source_file:
+          title: Source File
+          type: string
+        section_path:
+          title: Section Path
+          type: string
+      required:
+      - source_file
+      - section_path
+      title: SourceRef
+      type: object
+    ValidationError:
+      title: ValidationError
+      type: object
+      properties:
+        loc:
+          title: Location
+          type: array
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+        msg:
+          title: Message
+          type: string
+        type:
+          title: Error Type
+          type: string
+      required:
+      - loc
+      - msg
+      - type

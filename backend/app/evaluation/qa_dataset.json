@@ -1,0 +1,62 @@
+[
+  {
+    "question": "What is the maximum surge percentage allowed during a rolling production deployment?",
+    "ground_truth_answer": "25%. All production deployments use a rolling update strategy with a maximum surge of 25% and maximum unavailability of 0%.",
+    "source_file": "cloud_architecture_standards.pdf"
+  },
+  {
+    "question": "How long must a canary release run, and at what error rate does it automatically roll back?",
+    "ground_truth_answer": "Canaries must run for at least 15 minutes and automatically roll back if the error rate exceeds 2% or p99 latency regresses by more than 30%.",
+    "source_file": "cloud_architecture_standards.pdf"
+  },
+  {
+    "question": "What is the minimum number of replicas required for a production deployment?",
+    "ground_truth_answer": "3 replicas minimum in production, for high availability across zones.",
+    "source_file": "cloud_architecture_standards.pdf"
+  },
+  {
+    "question": "What are the default RPO and RTO for stateful data stores?",
+    "ground_truth_answer": "The default RPO is 15 minutes (via continuous WAL archiving) and the default RTO is 60 minutes.",
+    "source_file": "cloud_architecture_standards.pdf"
+  },
+  {
+    "question": "Within how long must a suspected data breach be reported to the Security team?",
+    "ground_truth_answer": "Within 1 hour of discovery.",
+    "source_file": "data_privacy_security_policy.pdf"
+  },
+  {
+    "question": "What encryption standard is required for Restricted-tier data at rest?",
+    "ground_truth_answer": "AES-256.",
+    "source_file": "data_privacy_security_policy.pdf"
+  },
+  {
+    "question": "How long are billing records retained for financial audit purposes?",
+    "ground_truth_answer": "7 years.",
+    "source_file": "data_privacy_security_policy.pdf"
+  },
+  {
+    "question": "What is the default API rate limit for the Pro plan, including burst capacity?",
+    "ground_truth_answer": "600 requests per minute with a burst capacity of 100 additional requests.",
+    "source_file": "product_api_reference_guide.pdf"
+  },
+  {
+    "question": "How are webhook payloads signed and verified?",
+    "ground_truth_answer": "Webhook payloads are signed using HMAC-SHA256 with the shared webhook secret, and consumers must verify the X-Signature header before processing.",
+    "source_file": "product_api_reference_guide.pdf"
+  },
+  {
+    "question": "What is the maximum page size allowed for paginated list endpoints?",
+    "ground_truth_answer": "200. The default page size is 25 and the maximum is 200.",
+    "source_file": "product_api_reference_guide.pdf"
+  },
+  {
+    "question": "How many days of PTO do full-time employees accrue per year?",
+    "ground_truth_answer": "21 days per year, accrued at 1.75 days per month.",
+    "source_file": "employee_handbook_leave_policy.pdf"
+  },
+  {
+    "question": "How many weeks of paid parental leave are eligible employees entitled to?",
+    "ground_truth_answer": "16 weeks of paid parental leave, to be taken within 12 months of the qualifying event.",
+    "source_file": "employee_handbook_leave_policy.pdf"
+  }
+]

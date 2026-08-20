@@ -1,0 +1,43 @@
+# --- Web / API layer ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+python-multipart==0.0.20
+PyYAML==6.0.2
+
+# --- Document preprocessing ---
+docling==2.15.1
+
+# --- RAG core ---
+llama-index-core==0.12.10
+llama-index-embeddings-ollama==0.5.0
+llama-index-llms-ollama==0.5.0
+llama-index-vector-stores-postgres==0.4.1
+llama-index-readers-docling==0.3.1
+llama-index-node-parser-docling==0.3.0
+
+# --- Multi-agent orchestration ---
+crewai==0.95.0
+crewai-tools==0.25.8
+
+# --- Vector DB driver ---
+psycopg2-binary==2.9.10
+asyncpg==0.30.0
+pgvector==0.3.6
+
+# --- Tracing / observability ---
+arize-phoenix-otel==0.6.1
+openinference-instrumentation-llama-index==3.1.2
+openinference-instrumentation-crewai==0.1.4
+openinference-instrumentation-litellm==0.1.9
+opentelemetry-exporter-otlp==1.29.0
+
+# --- Evaluation ---
+ragas==0.2.10
+datasets==3.2.0
+
+# --- Misc ---
+httpx==0.28.1
+tenacity==9.0.0
+python-dotenv==1.0.1

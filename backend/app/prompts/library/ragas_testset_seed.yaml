@@ -1,0 +1,29 @@
+name: ragas_testset_seed
+version: "1.0.0"
+summary: >
+  Prompt used offline (see app/evaluation/) to have an LLM propose additional
+  candidate question/ground-truth pairs from a source chunk, which a human
+  then reviews before adding to the curated eval set in qa_dataset.json.
+  Keeping this externalized means the eval-set generation process is auditable
+  and independently tunable from the eval-running code.
+input_variables:
+  - document_name
+  - chunk_text
+
+template: |
+  You are building a evaluation set for a retrieval-augmented QA system.
+
+  Source document: $document_name
+  Passage:
+  """
+  $chunk_text
+  """
+
+  Write ONE question that:
+  - Can be answered using only this passage.
+  - Is the kind of question a real employee would actually ask (not a
+    trivia/quiz question about document structure).
+  - Has an unambiguous, specific answer contained in the passage (a number,
+    a named procedure, a policy rule, etc.) rather than a vague summary.
+
+  Return JSON: {"question": string, "ground_truth_answer": string}.

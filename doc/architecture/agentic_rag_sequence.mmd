@@ -1,0 +1,36 @@
+sequenceDiagram
+    autonumber
+    actor U as User (via OpenWebUI)
+    participant API as FastAPI /v1/chat/completions
+    participant QA as Query Analyzer Agent
+    participant RET as Retriever Agent
+    participant KB as search_knowledge_base tool<br/>(LlamaIndex + PGVector)
+    participant SYN as Synthesizer Agent
+    participant VER as Verifier Agent
+    participant PHX as Phoenix (tracing)
+
+    U->>API: "What's our PTO accrual rate?"
+    API->>QA: analyze(question, chat_history)
+    QA-->>PHX: span: query_analysis
+    QA->>API: standalone_query, sub_queries, answer_type
+
+    loop up to CREW_MAX_ITERATIONS
+        API->>RET: retrieve(sub_queries)
+        RET->>KB: search_knowledge_base(query, top_k)
+        KB-->>RET: passages + source_file + section_path + score
+        RET-->>PHX: span: retrieval (+ tool call)
+        RET->>SYN: evidence passages
+        SYN-->>PHX: span: synthesis
+        SYN->>VER: draft_answer
+        VER->>VER: check claims vs evidence
+        VER-->>PHX: span: verification
+
+        alt approved
+            VER->>API: APPROVE
+        else rejected
+            VER->>API: REJECT + refined_query
+            Note over API,RET: refined_query becomes next<br/>iteration's search input
+        end
+    end
+
+    API->>U: final answer + citations (+ "unverified" flag if never approved)

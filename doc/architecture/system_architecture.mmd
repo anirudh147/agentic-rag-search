@@ -1,0 +1,71 @@
+flowchart TB
+    subgraph Client["Client Layer"]
+        User(["End User"])
+        OWUI["OpenWebUI\n(chat interface)"]
+    end
+
+    subgraph Backend["Agentic RAG Backend (FastAPI)"]
+        API["REST API\n/api/v1/*  +  /v1/chat/completions"]
+        subgraph Ingestion["Ingestion Workflow"]
+            Docling["Docling\n(PDF parsing, layout,\ntable structure, OCR)"]
+            Split["Markdown-aware splitting\n(LlamaIndex NodeParser)"]
+        end
+        subgraph Agentic["Agentic RAG Crew (CrewAI)"]
+            QA["Query Analyzer Agent"]
+            RET["Retriever Agent"]
+            SYN["Synthesizer Agent"]
+            VER["Verifier Agent"]
+        end
+        Prompts[("Externalized Prompts\napp/prompts/library/*.yaml")]
+        Tracing["Phoenix / OpenInference\ninstrumentation"]
+    end
+
+    subgraph Data["Data Layer"]
+        PG[("PostgreSQL + pgvector\ndocument_chunks")]
+        SRC[("Source PDFs\nsample_docs/")]
+    end
+
+    subgraph LLMLayer["LLM Layer"]
+        Ollama["Ollama\n(LLM + embedding models)"]
+    end
+
+    subgraph Observability["Observability"]
+        Phoenix["Arize Phoenix\n(trace explorer, prompt hub, evals)"]
+    end
+
+    subgraph EvalLayer["Evaluation"]
+        RAGAS["RAGAs harness\nfaithfulness / relevancy /\nprecision / recall"]
+    end
+
+    User -->|chat| OWUI -->|OpenAI-compatible API| API
+    User -.->|direct REST / Swagger UI| API
+
+    SRC --> Docling --> Split --> PG
+    API -->|POST /ingest| Docling
+
+    API -->|POST /query, /v1/chat/completions| QA
+    QA --> RET
+    RET -->|search_knowledge_base tool| PG
+    RET --> SYN --> VER
+    VER -->|approve| API
+    VER -->|reject + refined query| RET
+
+    QA -. reads .-> Prompts
+    RET -. reads .-> Prompts
+    SYN -. reads .-> Prompts
+    VER -. reads .-> Prompts
+
+    QA <-->|LLM calls| Ollama
+    RET <-->|LLM calls| Ollama
+    SYN <-->|LLM calls| Ollama
+    VER <-->|LLM calls| Ollama
+    Split -->|embeddings| Ollama
+
+    QA & RET & SYN & VER -.->|OTel spans| Tracing --> Phoenix
+
+    RAGAS -->|judge LLM| Ollama
+    RAGAS -->|reads| PG
+    RAGAS -->|writes report| API
+
+    classDef store fill:#eef2ff,stroke:#4338ca,color:#1e1b4b;
+    class PG,SRC,Prompts store;
