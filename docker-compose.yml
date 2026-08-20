@@ -1,0 +1,125 @@
+name: doc-search-agentic-rag
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ragdb}
+      POSTGRES_USER: ${POSTGRES_USER:-raguser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ragpassword}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-raguser} -d ${POSTGRES_DB:-ragdb}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+    # Uncomment to enable GPU acceleration if the host has an NVIDIA GPU +
+    # nvidia-container-toolkit installed:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  ollama-pull:
+    image: ollama/ollama:latest
+    restart: "no"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        ollama pull ${OLLAMA_LLM_MODEL:-qwen2.5:3b-instruct} &&
+        ollama pull ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text} &&
+        echo "Model pull complete."
+
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    restart: unless-stopped
+    environment:
+      PHOENIX_WORKING_DIR: /mnt/data
+    volumes:
+      - phoenix_data:/mnt/data
+    ports:
+      - "6006:6006"   # Phoenix UI + OTLP/HTTP trace collector (/v1/traces)
+      - "4317:4317"   # OTLP/gRPC (optional alternate exporter path)
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:6006')"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      OLLAMA_BASE_URL: http://ollama:11434
+      PHOENIX_COLLECTOR_ENDPOINT: http://phoenix:6006/v1/traces
+      SOURCE_DOCUMENTS_DIR: /data/source_documents
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+      phoenix:
+        condition: service_healthy
+    volumes:
+      - ./sample_docs:/data/source_documents:ro
+      - backend_model_cache:/app/.cache
+      - eval_reports:/data/eval_reports
+    ports:
+      - "8000:8000"
+
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    restart: unless-stopped
+    environment:
+      # Points OpenWebUI at our FastAPI backend's OpenAI-compatible surface
+      # (/v1/chat/completions, /v1/models) instead of api.openai.com.
+      OPENAI_API_BASE_URL: http://backend:8000/v1
+      OPENAI_API_KEY: unused-local-backend
+      WEBUI_NAME: "Document Search Assistant"
+      ENABLE_OLLAMA_API: "false"
+    depends_on:
+      - backend
+    volumes:
+      - openwebui_data:/app/backend/data
+    ports:
+      - "3000:8080"
+
+volumes:
+  pgdata:
+  ollama_data:
+  phoenix_data:
+  backend_model_cache:
+  eval_reports:
+  openwebui_data:
